@@ -1,26 +1,37 @@
+
 package com.example.aquacontrol_backend.temperatura.service;
 
 import com.example.aquacontrol_backend.common.exception.ResourceNotFoundException;
+import com.example.aquacontrol_backend.linea.repository.LineaRepository;
 import com.example.aquacontrol_backend.temperatura.dto.TemperaturaDTO;
 import com.example.aquacontrol_backend.temperatura.entity.TemperaturaEntity;
 import com.example.aquacontrol_backend.temperatura.repository.TemperaturaRepository;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
 public class TemperaturaService {
-    private final TemperaturaRepository repository;
 
-    public TemperaturaService(TemperaturaRepository repository) {
+    private final TemperaturaRepository repository;
+    private final LineaRepository lineaRepository;
+
+    public TemperaturaService(
+            TemperaturaRepository repository,
+            LineaRepository lineaRepository
+    ) {
         this.repository = repository;
+        this.lineaRepository = lineaRepository;
     }
 
     public List<TemperaturaDTO> listar(Long lineaId) {
         List<TemperaturaEntity> entities = lineaId == null
                 ? repository.findAll()
                 : repository.findByLineaIdOrderByFechaHoraDesc(lineaId);
+
         return entities.stream().map(this::toDto).toList();
     }
 
@@ -50,10 +61,23 @@ public class TemperaturaService {
 
     private TemperaturaEntity buscar(Long id) {
         return repository.findById(id).orElseThrow(() ->
-                new ResourceNotFoundException("Temperatura no encontrado: " + id));
+                new ResourceNotFoundException(
+                        "Temperatura no encontrada: " + id
+                )
+        );
+    }
+
+    private void validarLinea(Long lineaId) {
+        if (lineaId == null || !lineaRepository.existsById(lineaId)) {
+            throw new ResourceNotFoundException(
+                    "Línea no encontrada: " + lineaId
+            );
+        }
     }
 
     private void copiar(TemperaturaDTO dto, TemperaturaEntity e) {
+        validarLinea(dto.lineaId());
+
         e.setLineaId(dto.lineaId());
         e.setTemperatura(dto.temperatura());
         e.setFechaHora(dto.fechaHora());
