@@ -13,6 +13,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.security.core.AuthenticationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -45,5 +46,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> unexpected(Exception ex, HttpServletRequest request) {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno del servidor", request, Map.of());
+    }
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> authenticationError(
+            AuthenticationException ex,
+            HttpServletRequest request
+    ) {
+        return response(
+                HttpStatus.UNAUTHORIZED,
+                "Credenciales inválidas",
+                request,
+                Map.of()
+        );
     }
 }

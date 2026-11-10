@@ -1,0 +1,30 @@
+package com.example.aquacontrol_backend.auth.controller;
+
+import com.example.aquacontrol_backend.auth.dto.LoginRequest;
+import com.example.aquacontrol_backend.auth.dto.LoginResponse;
+import com.example.aquacontrol_backend.auth.service.AuthService;
+
+import jakarta.validation.Valid;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+public class AuthController {
+
+    private final AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request
+    ) {
+        return ResponseEntity.ok(
+                authService.login(request)
+        );
+    }
+}
