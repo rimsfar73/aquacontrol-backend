@@ -1,66 +1,53 @@
-
 package com.example.aquacontrol_backend.foto.controller;
 
 import com.example.aquacontrol_backend.foto.dto.FotoDTO;
+import com.example.aquacontrol_backend.foto.entity.FotoEntity;
 import com.example.aquacontrol_backend.foto.service.FotoService;
-
-import org.springframework.http.HttpStatus;
+import jakarta.validation.constraints.Positive;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
-
+// Asociamos la dirección de la foto con el flushing al que pertenece.
 @RestController
-@RequestMapping("/api/v1/fotos")
+@Validated
+@RequestMapping("/api/v1/flushing/{flushingId}/foto")
 public class FotoController {
 
     private final FotoService service;
 
+    // Recibimos el servicio que valida y guarda las imágenes.
     public FotoController(FotoService service) {
         this.service = service;
     }
 
+    // Recibimos un formulario con un archivo llamado "foto".
+    // Guardamos la evidencia o reemplazamos la existente.
+    @PutMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public FotoDTO guardar(
+            @PathVariable("flushingId") @Positive Long flushingId,
+            @RequestPart("foto") MultipartFile foto
+    ) {
+        return service.guardar(flushingId, foto);
+    }
+
+    // Devolvemos la imagen para visualizarla en el detalle de Android.
+    // La entidad y sus relaciones no se envían como JSON.
     @GetMapping
-    public List<FotoDTO> listar(
-            @RequestParam(required = false) Long flushingId
+    public ResponseEntity<byte[]> obtener(
+            @PathVariable("flushingId") @Positive Long flushingId
     ) {
-        return service.listar(flushingId);
-    }
+        FotoEntity foto = service.obtener(flushingId);
+        byte[] contenido = foto.getContenido();
 
-    @GetMapping("/{id}")
-    public FotoDTO obtener(@PathVariable Long id) {
-        return service.obtener(id);
-    }
-
-    @GetMapping("/por-flushing/{flushingId}")
-    public List<FotoDTO> listarPorFlushing(
-            @PathVariable Long flushingId
-    ) {
-        return service.listar(flushingId);
-    }
-
-    @PostMapping
-    public ResponseEntity<FotoDTO> crear(
-            @RequestBody FotoDTO dto
-    ) {
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(service.crear(dto));
-    }
-
-    @PutMapping("/{id}")
-    public FotoDTO actualizar(
-            @PathVariable Long id,
-            @RequestBody FotoDTO dto
-    ) {
-        return service.actualizar(id, dto);
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(
-            @PathVariable Long id
-    ) {
-        service.eliminar(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(foto.getTipoContenido()))
+                .contentLength(contenido.length)
+                // Evitamos reutilizar una imagen antigua después de reemplazarla.
+                .cacheControl(CacheControl.noStore())
+                .body(contenido);
     }
 }

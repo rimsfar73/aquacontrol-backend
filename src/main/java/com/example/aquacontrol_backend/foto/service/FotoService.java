@@ -1,118 +1,157 @@
-
 package com.example.aquacontrol_backend.foto.service;
 
 import com.example.aquacontrol_backend.common.exception.ResourceNotFoundException;
+import com.example.aquacontrol_backend.flushing.entity.FlushingEntity;
 import com.example.aquacontrol_backend.flushing.repository.FlushingRepository;
 import com.example.aquacontrol_backend.foto.dto.FotoDTO;
 import com.example.aquacontrol_backend.foto.entity.FotoEntity;
 import com.example.aquacontrol_backend.foto.repository.FotoRepository;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.Locale;
 
 @Service
 @Transactional(readOnly = true)
 public class FotoService {
 
-    private final FotoRepository repository;
+    // Limitamos el peso y las dimensiones para controlar los recursos utilizados.
+    private static final long MAX_BYTES = 5L * 1024 * 1024;
+    private static final long MAX_PIXELES = 25_000_000L;
+
+    private final FotoRepository fotoRepository;
     private final FlushingRepository flushingRepository;
 
+    // Recibimos los repositorios mediante Spring.
     public FotoService(
-            FotoRepository repository,
+            FotoRepository fotoRepository,
             FlushingRepository flushingRepository
     ) {
-        this.repository = repository;
+        this.fotoRepository = fotoRepository;
         this.flushingRepository = flushingRepository;
     }
 
-    public List<FotoDTO> listar(Long flushingId) {
-        List<FotoEntity> entities = flushingId == null
-                ? repository.findAll()
-                : repository.findByFlushingIdOrderByIdDesc(flushingId);
-
-        return entities.stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    public FotoDTO obtener(Long id) {
-        return toDto(buscar(id));
-    }
-
+    // Conservamos la comprobación de que el flushing exista.
+    // Guardamos la imagen o reemplazamos la evidencia anterior.
     @Transactional
-    public FotoDTO crear(FotoDTO dto) {
-        validarFlushing(dto.flushingId());
-        validarRuta(dto.ruta());
+    public FotoDTO guardar(Long flushingId, MultipartFile archivo) {
+        FlushingEntity flushing = flushingRepository.findById(flushingId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Flushing no encontrado: " + flushingId
+                ));
 
-        FotoEntity entity = new FotoEntity();
-        copiar(dto, entity);
-
-        return toDto(repository.save(entity));
-    }
-
-    @Transactional
-    public FotoDTO actualizar(Long id, FotoDTO dto) {
-        FotoEntity entity = buscar(id);
-
-        validarFlushing(dto.flushingId());
-        validarRuta(dto.ruta());
-
-        copiar(dto, entity);
-
-        return toDto(repository.save(entity));
-    }
-
-    @Transactional
-    public void eliminar(Long id) {
-        FotoEntity entity = buscar(id);
-        repository.delete(entity);
-    }
-
-    private FotoEntity buscar(Long id) {
-        return repository.findById(id).orElseThrow(() ->
-                new ResourceNotFoundException(
-                        "Foto no encontrada: " + id
-                )
-        );
-    }
-
-    private void validarFlushing(Long flushingId) {
-        if (flushingId == null
-                || !flushingRepository.existsById(flushingId)) {
-            throw new ResourceNotFoundException(
-                    "Flushing no encontrado: " + flushingId
-            );
+        if (archivo == null || archivo.isEmpty()) {
+            throw new IllegalArgumentException("Debes seleccionar una foto.");
         }
-    }
 
-    private void validarRuta(String ruta) {
-        if (ruta == null || ruta.isBlank()) {
+        if (archivo.getSize() > MAX_BYTES) {
             throw new IllegalArgumentException(
-                    "La ruta de la fotografía es obligatoria."
+                    "La foto no puede superar los 5 MiB."
             );
         }
 
-        if (ruta.length() > 500) {
+        byte[] contenido;
+        try {
+            contenido = archivo.getBytes();
+        } catch (IOException ex) {
             throw new IllegalArgumentException(
-                    "La ruta no puede superar 500 caracteres."
+                    "No se pudo leer la foto enviada.", ex
             );
         }
+
+        // Validamos la imagen antes de modificar la evidencia existente.
+        String tipoContenido = validarImagen(contenido);
+
+        FotoEntity foto = fotoRepository.findById(flushingId)
+                .orElseGet(() -> {
+                    FotoEntity nueva = new FotoEntity();
+                    nueva.setFlushing(flushing);
+                    return nueva;
+                });
+
+        foto.setTipoContenido(tipoContenido);
+        foto.setContenido(contenido);
+        fotoRepository.save(foto);
+
+        return new FotoDTO(flushingId, tipoContenido, contenido.length);
     }
 
-    private void copiar(FotoDTO dto, FotoEntity entity) {
-        entity.setFlushingId(dto.flushingId());
-        entity.setRuta(dto.ruta());
-        entity.setDescripcion(dto.descripcion());
+    // Recuperamos los bytes y su formato para responder desde el Controller.
+    public FotoEntity obtener(Long flushingId) {
+        return fotoRepository.findById(flushingId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Este flushing no tiene foto de evidencia."
+                ));
     }
 
-    private FotoDTO toDto(FotoEntity entity) {
-        return new FotoDTO(
-                entity.getId(),
-                entity.getFlushingId(),
-                entity.getRuta(),
-                entity.getDescripcion()
-        );
+    // Comprobamos el contenido real, aunque el archivo tenga otra extensión.
+    private String validarImagen(byte[] contenido) {
+        try (
+                ByteArrayInputStream bytes = new ByteArrayInputStream(contenido);
+                ImageInputStream entrada = ImageIO.createImageInputStream(bytes)
+        ) {
+            if (entrada == null) {
+                throw new IllegalArgumentException("La imagen no es válida.");
+            }
+
+            Iterator<ImageReader> lectores = ImageIO.getImageReaders(entrada);
+            if (!lectores.hasNext()) {
+                throw new IllegalArgumentException(
+                        "El archivo debe ser una imagen JPEG o PNG."
+                );
+            }
+
+            ImageReader lector = lectores.next();
+            try {
+                lector.setInput(entrada, true, true);
+
+                String formato = lector.getFormatName()
+                        .toLowerCase(Locale.ROOT);
+
+                String tipoContenido = switch (formato) {
+                    case "jpeg", "jpg" -> "image/jpeg";
+                    case "png" -> "image/png";
+                    default -> throw new IllegalArgumentException(
+                            "Solo admitimos imágenes JPEG o PNG."
+                    );
+                };
+
+                // Revisamos las dimensiones antes de decodificar la imagen.
+                int ancho = lector.getWidth(0);
+                int alto = lector.getHeight(0);
+
+                if (ancho <= 0 || alto <= 0
+                        || (long) ancho * alto > MAX_PIXELES) {
+                    throw new IllegalArgumentException(
+                            "Las dimensiones no son válidas "
+                                    + "o superan los 25 megapíxeles."
+                    );
+                }
+
+                var imagen = lector.read(0);
+                if (imagen == null) {
+                    throw new IllegalArgumentException(
+                            "No se pudo interpretar la imagen."
+                    );
+                }
+
+                // Liberamos la imagen decodificada; guardamos los bytes originales.
+                imagen.flush();
+                return tipoContenido;
+            } finally {
+                lector.dispose();
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException(
+                    "La imagen está dañada o no se puede leer.", ex
+            );
+        }
     }
 }
