@@ -83,12 +83,19 @@ public class SecurityConfig {
                                 "/"
                         ).permitAll()
 
-                        // Cada usuario autenticado puede consultar su perfil.
+                        // METEOROLOGIA - OPEN-METEO
+                        // Consulta publica de temperatura y humedad exterior
                         .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/v1/usuarios/me"
-                        ).authenticated()
+                        HttpMethod.GET,
+                        "/api/weather"
+                        ).permitAll()
 
+                       // Cada usuario autenticado puede consultar su perfil.
+                       .requestMatchers(
+                       HttpMethod.GET,
+                       "/api/v1/usuarios/me"
+                       ).authenticated()
+                   
                         // Ambos roles pueden consultar registros y sus fotos.
                         .requestMatchers(
                                 HttpMethod.GET,
