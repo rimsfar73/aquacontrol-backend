@@ -94,6 +94,13 @@ public class SecurityConfig {
                                 "/"
                         ).permitAll()
 
+                        // METEOROLOGIA - OPEN-METEO
+                        // Consulta publica de temperatura y humedad exterior
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/weather"
+                        ).permitAll()
+
                         // PERFIL DEL USUARIO
                         .requestMatchers(
                                 HttpMethod.GET,
