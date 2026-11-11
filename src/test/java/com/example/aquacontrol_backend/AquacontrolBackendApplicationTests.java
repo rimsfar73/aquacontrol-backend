@@ -1,20 +1,16 @@
-
 package com.example.aquacontrol_backend;
 
 import com.example.aquacontrol_backend.common.exception.ResourceNotFoundException;
-
-import com.example.aquacontrol_backend.linea.repository.LineaRepository;
-
-import com.example.aquacontrol_backend.temperatura.dto.TemperaturaDTO;
-import com.example.aquacontrol_backend.temperatura.entity.TemperaturaEntity;
-import com.example.aquacontrol_backend.temperatura.repository.TemperaturaRepository;
-import com.example.aquacontrol_backend.temperatura.service.TemperaturaService;
-
 import com.example.aquacontrol_backend.flushing.dto.FlushingDTO;
 import com.example.aquacontrol_backend.flushing.entity.FlushingEntity;
 import com.example.aquacontrol_backend.flushing.repository.FlushingRepository;
 import com.example.aquacontrol_backend.flushing.service.FlushingService;
-
+import com.example.aquacontrol_backend.foto.repository.FotoRepository;
+import com.example.aquacontrol_backend.linea.repository.LineaRepository;
+import com.example.aquacontrol_backend.temperatura.dto.TemperaturaDTO;
+import com.example.aquacontrol_backend.temperatura.entity.TemperaturaEntity;
+import com.example.aquacontrol_backend.temperatura.repository.TemperaturaRepository;
+import com.example.aquacontrol_backend.temperatura.service.TemperaturaService;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -27,257 +23,168 @@ import static org.mockito.Mockito.*;
 
 class AquacontrolBackendApplicationTests {
 
-    // ---------------------------------------------------------
-    // TEMPERATURA
-    // ---------------------------------------------------------
+    // Simulamos los repositorios para probar la lógica sin modificar PostgreSQL.
+    // JUnit crea una instancia nueva de esta clase para cada prueba.
+    private final LineaRepository lineas = mock(LineaRepository.class);
+    private final TemperaturaRepository temperaturas =
+            mock(TemperaturaRepository.class);
+    private final FlushingRepository flushing =
+            mock(FlushingRepository.class);
+    private final FotoRepository fotos = mock(FotoRepository.class);
+
+    private final TemperaturaService temperaturaService =
+            new TemperaturaService(temperaturas, lineas);
+
+    // Incorporamos la dependencia de fotos que ahora necesita el servicio.
+    private final FlushingService flushingService =
+            new FlushingService(flushing, lineas, fotos);
+
+    private final LocalDateTime fecha =
+            LocalDateTime.of(2026, 11, 3, 10, 0);
 
     @Test
     void crearTemperatura() {
-
-        TemperaturaRepository repository =
-                mock(TemperaturaRepository.class);
-
-        LineaRepository lineaRepository =
-                mock(LineaRepository.class);
-
-        // Simulamos que la línea 2 existe.
-        when(lineaRepository.existsById(2L))
-                .thenReturn(true);
-
-        when(repository.save(any(TemperaturaEntity.class)))
+        when(lineas.existsById(2L)).thenReturn(true);
+        when(temperaturas.save(any(TemperaturaEntity.class)))
                 .thenAnswer(invocation -> {
-                    TemperaturaEntity entity =
-                            invocation.getArgument(0);
-
+                    TemperaturaEntity entity = invocation.getArgument(0);
                     entity.setId(1L);
                     return entity;
                 });
 
         TemperaturaDTO dto = new TemperaturaDTO(
-                null,
-                2L,
-                26.5,
-                LocalDateTime.of(2026, 11, 3, 10, 0),
-                "Normal"
+                null, 2L, 26.5, fecha, "Normal"
         );
 
-        TemperaturaService service =
-                new TemperaturaService(
-                        repository,
-                        lineaRepository
-                );
+        TemperaturaDTO resultado = temperaturaService.crear(dto);
 
-        TemperaturaDTO saved = service.crear(dto);
-
-        assertEquals(1L, saved.id());
-        assertEquals(26.5, saved.temperatura());
-        assertEquals(2L, saved.lineaId());
-
-        verify(lineaRepository).existsById(2L);
-        verify(repository).save(any(TemperaturaEntity.class));
+        assertEquals(1L, resultado.id());
+        assertEquals(26.5, resultado.temperatura());
+        assertEquals(2L, resultado.lineaId());
+        verify(lineas).existsById(2L);
+        verify(temperaturas).save(any(TemperaturaEntity.class));
     }
 
     @Test
     void temperaturaNoEncontrada() {
-
-        TemperaturaRepository repository =
-                mock(TemperaturaRepository.class);
-
-        LineaRepository lineaRepository =
-                mock(LineaRepository.class);
-
-        when(repository.findById(99L))
-                .thenReturn(Optional.empty());
-
-        TemperaturaService service =
-                new TemperaturaService(
-                        repository,
-                        lineaRepository
-                );
+        when(temperaturas.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(
                 ResourceNotFoundException.class,
-                () -> service.obtener(99L)
+                () -> temperaturaService.obtener(99L)
         );
     }
 
     @Test
     void listarTemperaturasPorLinea() {
-
-        TemperaturaRepository repository =
-                mock(TemperaturaRepository.class);
-
-        LineaRepository lineaRepository =
-                mock(LineaRepository.class);
-
-        when(repository.findByLineaIdOrderByFechaHoraDesc(2L))
+        when(temperaturas.findByLineaIdOrderByFechaHoraDesc(2L))
                 .thenReturn(List.of());
 
-        TemperaturaService service =
-                new TemperaturaService(
-                        repository,
-                        lineaRepository
-                );
-
-        assertTrue(service.listar(2L).isEmpty());
-
-        verify(repository)
-                .findByLineaIdOrderByFechaHoraDesc(2L);
+        assertTrue(temperaturaService.listar(2L).isEmpty());
+        verify(temperaturas).findByLineaIdOrderByFechaHoraDesc(2L);
     }
 
     @Test
     void crearTemperaturaConLineaInexistente() {
-
-        TemperaturaRepository repository =
-                mock(TemperaturaRepository.class);
-
-        LineaRepository lineaRepository =
-                mock(LineaRepository.class);
-
-        // La línea 9999 no existe.
-        when(lineaRepository.existsById(9999L))
-                .thenReturn(false);
-
+        when(lineas.existsById(9999L)).thenReturn(false);
         TemperaturaDTO dto = new TemperaturaDTO(
-                null,
-                9999L,
-                26.5,
-                LocalDateTime.of(2026, 11, 3, 10, 0),
-                "Prueba de integridad"
+                null, 9999L, 26.5, fecha, "Prueba de integridad"
         );
-
-        TemperaturaService service =
-                new TemperaturaService(
-                        repository,
-                        lineaRepository
-                );
 
         assertThrows(
                 ResourceNotFoundException.class,
-                () -> service.crear(dto)
+                () -> temperaturaService.crear(dto)
         );
 
-        verify(lineaRepository).existsById(9999L);
-
-        // No debe llegar a guardar el registro.
-        verify(repository, never())
-                .save(any(TemperaturaEntity.class));
+        verify(lineas).existsById(9999L);
+        verify(temperaturas, never()).save(any(TemperaturaEntity.class));
     }
-
-    // ---------------------------------------------------------
-    // FLUSHING
-    // ---------------------------------------------------------
 
     @Test
     void crearFlushing() {
-
-        FlushingRepository repository =
-                mock(FlushingRepository.class);
-
-        LineaRepository lineaRepository =
-                mock(LineaRepository.class);
-
-        // Simulamos que la línea 2 existe.
-        when(lineaRepository.existsById(2L))
-                .thenReturn(true);
-
-        when(repository.save(any(FlushingEntity.class)))
+        when(lineas.existsById(2L)).thenReturn(true);
+        when(flushing.save(any(FlushingEntity.class)))
                 .thenAnswer(invocation -> {
-                    FlushingEntity entity =
-                            invocation.getArgument(0);
-
+                    FlushingEntity entity = invocation.getArgument(0);
                     entity.setId(4L);
                     return entity;
                 });
 
         FlushingDTO dto = new FlushingDTO(
-                null,
-                2L,
-                LocalDateTime.of(2026, 11, 3, 10, 0),
-                120,
-                "Limpieza",
-                null,
-                null
+                null, 2L, fecha, 120, "Limpieza", 28.5, 19.5
         );
 
-        FlushingService service =
-                new FlushingService(
-                        repository,
-                        lineaRepository
-                );
+        FlushingDTO resultado = flushingService.crear(dto);
 
-        FlushingDTO saved = service.crear(dto);
+        assertEquals(4L, resultado.id());
+        assertEquals(120, resultado.duracionSegundos());
+        assertEquals(2L, resultado.lineaId());
 
-        assertEquals(4L, saved.id());
-        assertEquals(120, saved.duracionSegundos());
-        assertEquals(2L, saved.lineaId());
+        // Comprobamos que ambas temperaturas se conserven.
+        assertEquals(Double.valueOf(28.5), resultado.temperaturaAntes());
+        assertEquals(Double.valueOf(19.5), resultado.temperaturaDespues());
 
-        verify(lineaRepository).existsById(2L);
-        verify(repository).save(any(FlushingEntity.class));
+        verify(lineas).existsById(2L);
+        verify(flushing).save(any(FlushingEntity.class));
     }
 
     @Test
     void flushingNoEncontrado() {
-
-        FlushingRepository repository =
-                mock(FlushingRepository.class);
-
-        LineaRepository lineaRepository =
-                mock(LineaRepository.class);
-
-        when(repository.findById(99L))
-                .thenReturn(Optional.empty());
-
-        FlushingService service =
-                new FlushingService(
-                        repository,
-                        lineaRepository
-                );
+        when(flushing.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(
                 ResourceNotFoundException.class,
-                () -> service.eliminar(99L)
+                () -> flushingService.eliminar(99L)
         );
+
+        // Si no existe el flushing, no intentamos eliminar ninguna evidencia.
+        verifyNoInteractions(fotos);
+        verify(flushing, never()).delete(any(FlushingEntity.class));
     }
 
     @Test
     void crearFlushingConLineaInexistente() {
-
-        FlushingRepository repository =
-                mock(FlushingRepository.class);
-
-        LineaRepository lineaRepository =
-                mock(LineaRepository.class);
-
-        // La línea 9999 no existe.
-        when(lineaRepository.existsById(9999L))
-                .thenReturn(false);
-
+        when(lineas.existsById(9999L)).thenReturn(false);
         FlushingDTO dto = new FlushingDTO(
-                null,
-                9999L,
-                LocalDateTime.of(2026, 11, 3, 10, 0),
-                120,
-                "Prueba de integridad",
-                null,
-                null
+                null, 9999L, fecha, 120,
+                "Prueba de integridad", null, null
         );
-
-        FlushingService service =
-                new FlushingService(
-                        repository,
-                        lineaRepository
-                );
 
         assertThrows(
                 ResourceNotFoundException.class,
-                () -> service.crear(dto)
+                () -> flushingService.crear(dto)
         );
 
-        verify(lineaRepository).existsById(9999L);
+        verify(lineas).existsById(9999L);
+        verify(flushing, never()).save(any(FlushingEntity.class));
+    }
 
-        // No debe llegar a guardar el registro.
-        verify(repository, never())
-                .save(any(FlushingEntity.class));
+    @Test
+    void eliminarFlushingConFoto() {
+        FlushingEntity entity = new FlushingEntity();
+        entity.setId(4L);
+        when(flushing.findById(4L)).thenReturn(Optional.of(entity));
+        when(fotos.eliminarPorFlushingId(4L)).thenReturn(1);
+
+        flushingService.eliminar(4L);
+
+        // La evidencia debe eliminarse antes que el registro que la sostiene.
+        var orden = inOrder(fotos, flushing);
+        orden.verify(fotos).eliminarPorFlushingId(4L);
+        orden.verify(flushing).delete(entity);
+    }
+
+    @Test
+    void eliminarFlushingSinFoto() {
+        FlushingEntity entity = new FlushingEntity();
+        entity.setId(5L);
+        when(flushing.findById(5L)).thenReturn(Optional.of(entity));
+        when(fotos.eliminarPorFlushingId(5L)).thenReturn(0);
+
+        // Una foto opcional ausente no debe impedir eliminar el flushing.
+        assertDoesNotThrow(() -> flushingService.eliminar(5L));
+
+        verify(fotos).eliminarPorFlushingId(5L);
+        verify(flushing).delete(entity);
     }
 }

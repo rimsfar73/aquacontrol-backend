@@ -1,23 +1,17 @@
-
 package com.example.aquacontrol_backend.auth.security;
 
 import com.example.aquacontrol_backend.usuario.service.UsuarioService;
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -26,11 +20,13 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+    // Conservamos BCrypt para comprobar las contraseñas almacenadas.
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    // Conectamos la autenticación con los usuarios de nuestra base.
     @Bean
     public AuthenticationManager authenticationManager(
             UsuarioService usuarioService,
@@ -38,20 +34,17 @@ public class SecurityConfig {
     ) {
         DaoAuthenticationProvider provider =
                 new DaoAuthenticationProvider(usuarioService);
-
         provider.setPasswordEncoder(passwordEncoder);
-
         return new ProviderManager(provider);
     }
 
+    // Obtenemos el rol del token validado y aceptamos solo nuestros dos roles.
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
-
         JwtAuthenticationConverter converter =
                 new JwtAuthenticationConverter();
 
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
-
             String rol = jwt.getClaimAsString("rol");
 
             if (!"ROLE_OPERARIO".equals(rol)
@@ -70,25 +63,21 @@ public class SecurityConfig {
             HttpSecurity http,
             JwtAuthenticationConverter jwtConverter
     ) throws Exception {
-
         return http
+                // Nuestra API recibe tokens y no utiliza sesiones con cookies.
                 .csrf(csrf -> csrf.disable())
-
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
                         )
                 )
-
                 .authorizeHttpRequests(auth -> auth
 
-                        // AUTH
+                        // Permitimos iniciar sesión y consultar el estado.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/auth/login"
                         ).permitAll()
-
-                        // ESTADO DEL BACKEND
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/"
@@ -97,137 +86,92 @@ public class SecurityConfig {
                         // METEOROLOGIA - OPEN-METEO
                         // Consulta publica de temperatura y humedad exterior
                         .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/weather"
+                        HttpMethod.GET,
+                        "/api/weather"
                         ).permitAll()
 
-                        // PERFIL DEL USUARIO
+                       // Cada usuario autenticado puede consultar su perfil.
+                       .requestMatchers(
+                       HttpMethod.GET,
+                       "/api/v1/usuarios/me"
+                       ).authenticated()
+                   
+                        // Ambos roles pueden consultar registros y sus fotos.
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/v1/usuarios/me"
-                        ).authenticated()
-
-                        // FLUSHING Y TEMPERATURA
-                        // DELETE: solo SUPERVISOR
-                        .requestMatchers(
-                                HttpMethod.DELETE,
+                                "/api/v1/flushing",
                                 "/api/v1/flushing/**",
-                                "/api/v1/temperatura/**"
-                        ).hasRole("SUPERVISOR")
-
-                        // Operaciones restantes: ambos roles
-                        .requestMatchers(
-                                "/api/v1/flushing/**",
+                                "/api/v1/temperatura",
                                 "/api/v1/temperatura/**"
                         ).hasAnyRole("OPERARIO", "SUPERVISOR")
 
-                        // GRANJAS
+                        // Solo el operario puede crear registros.
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/v1/granjas"
-                        ).hasRole("SUPERVISOR")
+                                "/api/v1/flushing",
+                                "/api/v1/temperatura"
+                        ).hasRole("OPERARIO")
 
+                        // Solo el operario puede editar o subir la evidencia.
                         .requestMatchers(
                                 HttpMethod.PUT,
-                                "/api/v1/granjas/**"
-                        ).hasRole("SUPERVISOR")
+                                "/api/v1/flushing/*",
+                                "/api/v1/flushing/*/foto",
+                                "/api/v1/temperatura/*"
+                        ).hasRole("OPERARIO")
 
+                        // Solo el supervisor elimina registros.
+                        // La foto se elimina junto con el flushing desde el servicio.
                         .requestMatchers(
                                 HttpMethod.DELETE,
-                                "/api/v1/granjas/**"
+                                "/api/v1/flushing/*",
+                                "/api/v1/temperatura/*"
                         ).hasRole("SUPERVISOR")
 
+                        // Conservamos la consulta de la estructura para ambos roles.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/granjas",
-                                "/api/v1/granjas/**"
-                        ).hasAnyRole("OPERARIO", "SUPERVISOR")
-
-                        // GALPONES
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/api/v1/galpones"
-                        ).hasRole("SUPERVISOR")
-
-                        .requestMatchers(
-                                HttpMethod.PUT,
-                                "/api/v1/galpones/**"
-                        ).hasRole("SUPERVISOR")
-
-                        .requestMatchers(
-                                HttpMethod.DELETE,
-                                "/api/v1/galpones/**"
-                        ).hasRole("SUPERVISOR")
-
-                        .requestMatchers(
-                                HttpMethod.GET,
+                                "/api/v1/granjas/**",
                                 "/api/v1/galpones",
-                                "/api/v1/galpones/**"
-                        ).hasAnyRole("OPERARIO", "SUPERVISOR")
-
-                        // LINEAS
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/api/v1/lineas"
-                        ).hasRole("SUPERVISOR")
-
-                        .requestMatchers(
-                                HttpMethod.PUT,
-                                "/api/v1/lineas/**"
-                        ).hasRole("SUPERVISOR")
-
-                        .requestMatchers(
-                                HttpMethod.DELETE,
-                                "/api/v1/lineas/**"
-                        ).hasRole("SUPERVISOR")
-
-                        .requestMatchers(
-                                HttpMethod.GET,
+                                "/api/v1/galpones/**",
                                 "/api/v1/lineas",
                                 "/api/v1/lineas/**"
                         ).hasAnyRole("OPERARIO", "SUPERVISOR")
 
-                        // FOTOS
-                        // GET: ambos roles
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/v1/fotos",
-                                "/api/v1/fotos/**"
-                        ).hasAnyRole("SUPERVISOR", "OPERARIO")
-
-                        // POST: ambos roles
+                        // Conservamos los permisos de administración de Rimsky
+                        // para granjas, galpones y líneas.
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/v1/fotos"
-                        ).hasAnyRole("SUPERVISOR", "OPERARIO")
-
-                        // PUT: ambos roles
+                                "/api/v1/granjas",
+                                "/api/v1/galpones",
+                                "/api/v1/lineas"
+                        ).hasRole("SUPERVISOR")
                         .requestMatchers(
                                 HttpMethod.PUT,
-                                "/api/v1/fotos/**"
-                        ).hasAnyRole("SUPERVISOR", "OPERARIO")
-
-                        // DELETE: solo SUPERVISOR
+                                "/api/v1/granjas/**",
+                                "/api/v1/galpones/**",
+                                "/api/v1/lineas/**"
+                        ).hasRole("SUPERVISOR")
                         .requestMatchers(
                                 HttpMethod.DELETE,
-                                "/api/v1/fotos/**"
+                                "/api/v1/granjas/**",
+                                "/api/v1/galpones/**",
+                                "/api/v1/lineas/**"
                         ).hasRole("SUPERVISOR")
 
-                        // DENEGAR TODAS LAS DEMAS RUTAS
+                        // Las rutas que no definimos explícitamente quedan cerradas.
                         .anyRequest().denyAll()
                 )
 
+                // Conservamos la validación JWT incorporada por Rimsky.
                 .oauth2ResourceServer(oauth ->
                         oauth.jwt(jwt ->
-                                jwt.jwtAuthenticationConverter(
-                                        jwtConverter
-                                )
+                                jwt.jwtAuthenticationConverter(jwtConverter)
                         )
                 )
-
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
-
                 .build();
     }
 }
