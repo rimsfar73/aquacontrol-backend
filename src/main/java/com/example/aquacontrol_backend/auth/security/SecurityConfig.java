@@ -1,3 +1,4 @@
+
 package com.example.aquacontrol_backend.auth.security;
 
 import com.example.aquacontrol_backend.usuario.service.UsuarioService;
@@ -64,7 +65,7 @@ public class SecurityConfig {
             JwtAuthenticationConverter jwtConverter
     ) throws Exception {
         return http
-                // Nuestra API recibe tokens y no utiliza sesiones con cookies.
+                // API REST sin sesiones de servidor.
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
@@ -73,30 +74,46 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
 
-                        // Permitimos iniciar sesión y consultar el estado.
+                        // SWAGGER / OPENAPI
+                        // Acceso a la documentación sin iniciar sesión.
+                        // Las operaciones protegidas siguen requiriendo JWT.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**"
+                        ).permitAll()
+
+                        // AUTENTICACIÓN
+                        // Permitimos iniciar sesión.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/auth/login"
                         ).permitAll()
+
+                        // ESTADO DEL SERVIDOR
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/"
                         ).permitAll()
 
-                        // METEOROLOGIA - OPEN-METEO
-                        // Consulta publica de temperatura y humedad exterior
+                        // METEOROLOGÍA - OPEN-METEO
+                        // Consulta pública de temperatura y humedad exterior.
                         .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/weather"
+                                HttpMethod.GET,
+                                "/api/weather"
                         ).permitAll()
 
-                       // Cada usuario autenticado puede consultar su perfil.
-                       .requestMatchers(
-                       HttpMethod.GET,
-                       "/api/v1/usuarios/me"
-                       ).authenticated()
-                   
-                        // Ambos roles pueden consultar registros y sus fotos.
+                        // PERFIL DE USUARIO
+                        // Cada usuario autenticado puede consultar su perfil.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/usuarios/me"
+                        ).authenticated()
+
+                        // FLUSHING Y TEMPERATURA - CONSULTAS
+                        // Operario y Supervisor pueden consultar registros.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/flushing",
@@ -105,14 +122,16 @@ public class SecurityConfig {
                                 "/api/v1/temperatura/**"
                         ).hasAnyRole("OPERARIO", "SUPERVISOR")
 
-                        // Solo el operario puede crear registros.
+                        // FLUSHING Y TEMPERATURA - CREACIÓN
+                        // Solo Operario puede crear registros.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/flushing",
                                 "/api/v1/temperatura"
                         ).hasRole("OPERARIO")
 
-                        // Solo el operario puede editar o subir la evidencia.
+                        // FLUSHING Y TEMPERATURA - EDICIÓN
+                        // Solo Operario puede editar o subir evidencias.
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/v1/flushing/*",
@@ -120,15 +139,16 @@ public class SecurityConfig {
                                 "/api/v1/temperatura/*"
                         ).hasRole("OPERARIO")
 
-                        // Solo el supervisor elimina registros.
-                        // La foto se elimina junto con el flushing desde el servicio.
+                        // FLUSHING Y TEMPERATURA - ELIMINACIÓN
+                        // Solo Supervisor puede eliminar registros.
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/v1/flushing/*",
                                 "/api/v1/temperatura/*"
                         ).hasRole("SUPERVISOR")
 
-                        // Conservamos la consulta de la estructura para ambos roles.
+                        // ESTRUCTURA - CONSULTAS
+                        // Ambos roles pueden consultar granjas, galpones y líneas.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/granjas",
@@ -139,20 +159,24 @@ public class SecurityConfig {
                                 "/api/v1/lineas/**"
                         ).hasAnyRole("OPERARIO", "SUPERVISOR")
 
-                        // Conservamos los permisos de administración de Rimsky
-                        // para granjas, galpones y líneas.
+                        // ESTRUCTURA - CREACIÓN
+                        // Solo Supervisor administra granjas, galpones y líneas.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/granjas",
                                 "/api/v1/galpones",
                                 "/api/v1/lineas"
                         ).hasRole("SUPERVISOR")
+
+                        // ESTRUCTURA - EDICIÓN
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/v1/granjas/**",
                                 "/api/v1/galpones/**",
                                 "/api/v1/lineas/**"
                         ).hasRole("SUPERVISOR")
+
+                        // ESTRUCTURA - ELIMINACIÓN
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/v1/granjas/**",
@@ -160,16 +184,19 @@ public class SecurityConfig {
                                 "/api/v1/lineas/**"
                         ).hasRole("SUPERVISOR")
 
-                        // Las rutas que no definimos explícitamente quedan cerradas.
+                        // SEGURIDAD POR DEFECTO
+                        // Toda ruta no declarada queda bloqueada.
                         .anyRequest().denyAll()
                 )
 
-                // Conservamos la validación JWT incorporada por Rimsky.
+                // Validación JWT Bearer.
                 .oauth2ResourceServer(oauth ->
                         oauth.jwt(jwt ->
                                 jwt.jwtAuthenticationConverter(jwtConverter)
                         )
                 )
+
+                // Deshabilitamos autenticación Basic y formularios.
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .build();
