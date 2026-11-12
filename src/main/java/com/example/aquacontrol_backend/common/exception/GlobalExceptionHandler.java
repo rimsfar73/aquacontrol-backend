@@ -1,8 +1,14 @@
+
 package com.example.aquacontrol_backend.common.exception;
 
 import com.example.aquacontrol_backend.common.dto.ErrorResponse;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -18,25 +24,34 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-// Centralizamos las respuestas de error para que Android reciba un formato común.
+// Centralizamos las respuestas de error para que Android
+// reciba un formato común.
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // Incluimos fecha, código HTTP, mensaje y dirección de la solicitud.
+    // Registra los errores internos en la consola del backend.
+    // No expone información sensible al cliente.
+    private static final Logger log =
+            LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    // Incluimos fecha, código HTTP, mensaje y dirección
+    // de la solicitud.
     private ResponseEntity<ErrorResponse> response(
             HttpStatus status,
             String message,
             HttpServletRequest request,
             Map<String, String> details
     ) {
-        return ResponseEntity.status(status).body(new ErrorResponse(
-                Instant.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                message,
-                request.getRequestURI(),
-                details
-        ));
+        return ResponseEntity.status(status).body(
+                new ErrorResponse(
+                        Instant.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        message,
+                        request.getRequestURI(),
+                        details
+                )
+        );
     }
 
     // Respondemos 404 cuando no existe el registro solicitado.
@@ -60,6 +75,7 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         Map<String, String> errors = new LinkedHashMap<>();
+
         ex.getBindingResult().getFieldErrors().forEach(error ->
                 errors.putIfAbsent(
                         error.getField(),
@@ -75,14 +91,15 @@ public class GlobalExceptionHandler {
         );
     }
 
-    // Respondemos 413 si se supera el límite de archivo o del formulario.
+    // Respondemos 413 si se supera el límite de archivo
+    // o del formulario.
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorResponse> uploadTooLarge(
             MaxUploadSizeExceededException ex,
             HttpServletRequest request
     ) {
         return response(
-                HttpStatus.valueOf(413),
+                HttpStatus.PAYLOAD_TOO_LARGE,
                 "La carga supera el tamaño permitido: "
                         + "máximo 5 MiB por foto y 6 MiB por solicitud.",
                 request,
@@ -104,7 +121,8 @@ public class GlobalExceptionHandler {
         );
     }
 
-    // Conservamos la respuesta para datos incorrectos o formatos no válidos.
+    // Conservamos la respuesta para datos incorrectos
+    // o formatos no válidos.
     @ExceptionHandler({
             ConstraintViolationException.class,
             MethodArgumentTypeMismatchException.class,
@@ -123,7 +141,7 @@ public class GlobalExceptionHandler {
         );
     }
 
-    // Conservamos el manejo de credenciales incorporado por Rimsky.
+    // Conservamos el manejo de credenciales existente.
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ErrorResponse> authenticationError(
             AuthenticationException ex,
@@ -137,12 +155,24 @@ public class GlobalExceptionHandler {
         );
     }
 
-    // Evitamos exponer detalles internos ante errores inesperados.
+    // Capturamos errores inesperados y registramos
+    // la excepción completa para facilitar el diagnóstico.
+    //
+    // Android y otros clientes siguen recibiendo una
+    // respuesta genérica, sin información interna sensible.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> unexpected(
             Exception ex,
             HttpServletRequest request
     ) {
+
+        log.error(
+                "Error inesperado en {} {}",
+                request.getMethod(),
+                request.getRequestURI(),
+                ex
+        );
+
         return response(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Error interno del servidor",
