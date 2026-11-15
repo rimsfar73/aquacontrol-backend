@@ -139,6 +139,27 @@ public class SecurityConfig {
                                 "/api/v1/temperatura/*"
                         ).hasRole("OPERARIO")
 
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/usuarios/me"
+                                ).authenticated()
+
+                                // ALERTAS - CONSULTA
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/alertas",
+                                        "/api/v1/alertas/**"
+                                ).hasAnyRole("OPERARIO", "SUPERVISOR")
+
+                                // FLUSHING Y TEMPERATURA - CONSULTAS
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/flushing",
+                                        "/api/v1/flushing/**",
+                                        "/api/v1/temperatura",
+                                        "/api/v1/temperatura/**"
+                                ).hasAnyRole("OPERARIO", "SUPERVISOR")
+
                         // FLUSHING Y TEMPERATURA - ELIMINACIÓN
                         // Solo Supervisor puede eliminar registros.
                         .requestMatchers(

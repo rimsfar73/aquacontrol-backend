@@ -63,6 +63,15 @@
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
+        <!-- ================================================ -->
+        <!-- HATEAOS                -->
+        <!-- ================================================ -->
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-hateoas</artifactId>
+        </dependency>
+
 
         <!-- ================================================ -->
         <!-- 3.2 PERSISTENCIA - SPRING DATA JPA                -->
