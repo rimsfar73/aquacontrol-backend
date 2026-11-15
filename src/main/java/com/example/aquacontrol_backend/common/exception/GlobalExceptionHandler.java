@@ -1,4 +1,3 @@
-
 package com.example.aquacontrol_backend.common.exception;
 
 import com.example.aquacontrol_backend.common.dto.ErrorResponse;
@@ -99,7 +98,7 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         return response(
-                HttpStatus.PAYLOAD_TOO_LARGE,
+                HttpStatus.CONTENT_TOO_LARGE,
                 "La carga supera el tamaño permitido: "
                         + "máximo 5 MiB por foto y 6 MiB por solicitud.",
                 request,
@@ -165,7 +164,6 @@ public class GlobalExceptionHandler {
             Exception ex,
             HttpServletRequest request
     ) {
-
         log.error(
                 "Error inesperado en {} {}",
                 request.getMethod(),
